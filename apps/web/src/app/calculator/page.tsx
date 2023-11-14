@@ -1,28 +1,65 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+
+type Expression = {
+  id: string;
+  text: string;
+};
 
 export default function Calculator(): JSX.Element {
-  const [lines, setLines] = useState(["hi", "bye"]);
+  const [expressions, setExpressions] = useState<Expression[]>([]);
+
+  const updateLine = useCallback(
+    (i: number, text: string) => {
+      setExpressions((expressions) => [
+        ...expressions.slice(0, i),
+        { id: expressions[i].id, text },
+        ...expressions.slice(i + 1),
+      ]);
+    },
+    [setExpressions]
+  );
+
+  const deleteLine = useCallback(
+    (line: number) => {
+      setExpressions((expressions) => [
+        ...expressions.slice(0, line),
+        ...expressions.slice(line + 1),
+      ]);
+    },
+    [setExpressions]
+  );
+
+  const addLine = useCallback(() => {
+    setExpressions((expressions) =>
+      expressions.concat([{ id: crypto.randomUUID(), text: "" }])
+    );
+  }, [setExpressions]);
 
   return (
     <div className="flex flex-col h-full">
-      {lines.map((line, i) => (
-        <div key={i} className="flex flex-row">
-          <p>{line}</p>
+      {expressions.map((expression, i) => (
+        <div key={expression.id} className="flex flex-row">
+          <input
+            type="text"
+            onChange={(e) => {
+              updateLine(i, e.target.value);
+            }}
+          />
           <button
             onClick={() => {
-              setLines(lines.slice(0, i).concat(lines.slice(i + 1)));
+              deleteLine(i);
             }}
           >
             <p>-</p>
           </button>
         </div>
       ))}
-      <div key={lines.length} className="flex flex-row">
+      <div key={Math.random().toString()} className="flex flex-row">
         <button
           onClick={() => {
-            setLines(lines.concat([""]));
+            addLine();
           }}
         >
           <p>+</p>
