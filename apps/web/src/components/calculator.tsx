@@ -73,17 +73,25 @@ export function Calculator(): JSX.Element {
     (newText: string, index: number) => {
       setExpressions((expressions) => {
         return expressions.map((expression) => {
-          const text =
-            expression.id === expressions[index].id ? newText : expression.text;
+          const isCurrent = expression.id === expressions[index].id;
+          const text = isCurrent ? newText : expression.text;
           if (text !== "") {
             try {
-              const compiled = limitedCompile(text);
-              const yValues = xValues.map((x) => compiled.evaluate({ x }));
-              return {
-                id: expression.id,
-                text: text,
-                results: yValues as number[],
-              };
+              if (isCurrent) {
+                const compiled = limitedCompile(text);
+                const yValues = xValues.map((x) => compiled.evaluate({ x }));
+                return {
+                  id: expression.id,
+                  text: text,
+                  results: yValues as number[],
+                };
+              } else {
+                return {
+                  id: expression.id,
+                  text: text,
+                  results: expression.results,
+                };
+              }
             } catch (e: unknown) {
               if (e instanceof Error) {
                 const error = e as Error;
