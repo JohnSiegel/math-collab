@@ -17,9 +17,12 @@ const math = create(all);
 
 const kGraphLOD = 500;
 
-const kLogBaseRegex = /\\log_{([^}]*)}\\left\(([^)]*)\right\)/g;
+const kLogBaseRegex =
+  /\\log_({([^}]+)}|([^{}]))\\left\(([^(\\right)]+)\\right\)/g;
+const kReplaceLogBase = "\\log\\left($4,$2$3\\right)";
 
-const kReplaceLogBase = "\\log\\left($2,$1\\right)";
+const kLogDefaultBaseRegex = /\\log\\left\(([^(\\right)]+)\\right\)/g;
+const kReplaceLogDefaultBase = "\\log\\left($1,10\\right)";
 
 export function Graph(props: {
   expressions: Expression[];
@@ -29,9 +32,10 @@ export function Graph(props: {
     return props.expressions.map((expression) => {
       if (expression.latex !== "") {
         try {
-          return parseTex(
-            expression.latex.replaceAll(kLogBaseRegex, kReplaceLogBase)
-          ).compile();
+          const withLogBases = expression.latex
+            .replaceAll(kLogDefaultBaseRegex, kReplaceLogDefaultBase)
+            .replaceAll(kLogBaseRegex, kReplaceLogBase);
+          return parseTex(withLogBases).compile();
         } catch (e) {
           if (e instanceof Error) {
             return e;
