@@ -1,4 +1,11 @@
 {
+  "name": "math-collab",
+  "devDependencies": {
+    "eslint": "^8.48.0",
+    "prettier": "^3.0.3",
+    "turbo": "1.10.16"
+  },
+  "packageManager": "bun@1.0.11",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -6,13 +13,6 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
-  "devDependencies": {
-    "eslint": "^8.48.0",
-    "prettier": "^3.0.3",
-    "turbo": "1.10.16"
-  },
-  "name": "math-collab",
-  "packageManager": "bun@1.0.11",
   "workspaces": [
     "apps/*",
     "packages/*"

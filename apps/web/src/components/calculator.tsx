@@ -1,111 +1,79 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { create, all } from "mathjs";
 import dynamic from "next/dynamic";
-const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Expression } from "./graph";
+import { Graph } from "./graph";
 
-const math = create(all);
-const limitedCompile = math.compile;
-
-math.import(
-  {
-    import: function () {
-      throw new Error("Function import is disabled");
-    },
-    createUnit: function () {
-      throw new Error("Function createUnit is disabled");
-    },
-    evaluate: function () {
-      throw new Error("Function evaluate is disabled");
-    },
-    parse: function () {
-      throw new Error("Function parse is disabled");
-    },
-    simplify: function () {
-      throw new Error("Function simplify is disabled");
-    },
-  },
-  { override: true }
+const EditableMathField = dynamic(
+  async () => (await import("react-mathquill")).EditableMathField,
+  { ssr: false }
 );
 
+const kInitialSidebarWidth = 150;
+const kInitialSidebarWidthPercent = 0.2;
+const kSidebarSnapThreshold = 70;
+
+const kSqrtRegex = /(?<!\\)sqrt/g;
+
 export function Calculator(): JSX.Element {
-  const [expressions, setExpressions] = useState<
-    { id: string; text: string }[]
-  >([{ id: crypto.randomUUID(), text: "" }]);
+  const [expressions, setExpressions] = useState<Expression[]>([
+    { id: crypto.randomUUID(), latex: "", text: "" },
+  ]);
 
-  const functions = useMemo(() => {
-    return expressions.map((expression) => {
-      if (expression.text !== "") {
-        try {
-          return limitedCompile(expression.text);
-        } catch (e) {
-          if (e instanceof Error) {
-            return e;
-          }
+  const [sidebarWidth, setSidebarWidth] = useState(kInitialSidebarWidth);
+
+  const [dragging, setDragging] = useState(false);
+
+  const mouseUpHandler = useCallback(() => {
+    setDragging(false);
+  }, [setDragging]);
+
+  useEffect(() => {
+    window.addEventListener("mouseup", mouseUpHandler);
+    return () => {
+      window.removeEventListener("mouseup", mouseUpHandler);
+    };
+  }, [mouseUpHandler]);
+
+  const mouseMoveHandler = useCallback(
+    (e: MouseEvent) => {
+      if (dragging) {
+        if (e.clientX < kSidebarSnapThreshold) {
+          setSidebarWidth(0);
+        } else if (e.clientX > window.innerWidth - kSidebarSnapThreshold) {
+          setSidebarWidth(window.innerWidth);
+        } else {
+          setSidebarWidth(e.clientX);
         }
       }
-      return null;
-    });
-  }, [expressions]);
+    },
+    [dragging, setSidebarWidth]
+  );
 
-  const [xRange, setXRange] = useState<[number, number]>([-10, 10]);
-
-  const xValues = useMemo(() => {
-    return math
-      .range(xRange[0], xRange[1], 0.1)
-      .toArray()
-      .map(
-        (val: math.MathNumericType | math.MathNumericType[]) =>
-          val.valueOf() as number
-      );
-  }, [xRange]);
-
-  const yValues = useMemo(() => {
-    return functions.map((func) => {
-      if (func instanceof Error) {
-        return func;
-      } else if (func) {
-        try {
-          return xValues.map((x) => func.evaluate({ x: x }) as number);
-        } catch (e) {
-          if (e instanceof Error) {
-            return e;
-          }
-        }
-      }
-      return null;
-    });
-  }, [xValues, expressions]);
-
-  const graphs = useMemo(() => {
-    return yValues.flatMap((result, i) => {
-      if (result && !(result instanceof Error)) {
-        return {
-          x: xValues,
-          y: result,
-          name: expressions[i].text,
-        };
-      }
-      return [];
-    });
-  }, [xValues, yValues]);
+  useEffect(() => {
+    window.addEventListener("mousemove", mouseMoveHandler);
+    return () => {
+      window.removeEventListener("mousemove", mouseMoveHandler);
+    };
+  }, [mouseMoveHandler]);
 
   const deleteExpression = useCallback(
     (index: number) => {
-      setExpressions((expressions) => [
-        ...expressions.slice(0, index),
-        ...expressions.slice(index + 1),
+      setExpressions((exprs) => [
+        ...exprs.slice(0, index),
+        ...exprs.slice(index + 1),
       ]);
     },
     [setExpressions]
   );
 
   const addExpression = useCallback(() => {
-    setExpressions((expressions) => [
-      ...expressions,
+    setExpressions((exprs) => [
+      ...exprs,
       {
         id: crypto.randomUUID(),
+        latex: "",
         text: "",
         results: null,
       },
@@ -113,94 +81,99 @@ export function Calculator(): JSX.Element {
   }, [setExpressions]);
 
   const updateExpression = useCallback(
-    (newText: string, index: number) => {
-      setExpressions((expressions) => {
-        const newExpressions = [...expressions];
+    (newText: string, newLatex: string, index: number) => {
+      setExpressions((exprs) => {
+        const newExpressions = [...exprs];
         newExpressions[index].text = newText;
+        newExpressions[index].latex = newLatex;
         return newExpressions;
       });
     },
     [setExpressions]
   );
 
-  const [yRange, setYRange] = useState<[number, number]>([-10, 10]);
+  useEffect(() => {
+    setSidebarWidth(window.innerWidth * kInitialSidebarWidthPercent);
+  }, [setSidebarWidth]);
 
-  const onUpdatePlot = useCallback(
-    (event: any) => {
-      const x = [event["xaxis.range[0]"], event["xaxis.range[1]"]] as [
-        number,
-        number,
-      ];
-      const y = [event["yaxis.range[0]"], event["yaxis.range[1]"]] as [
-        number,
-        number,
-      ];
-      if (x[0] && x[1]) {
-        setXRange(x);
-      }
-      if (y[0] && y[1]) {
-        setYRange(y);
-      }
-    },
-    [setXRange, setYRange]
-  );
+  const onResize = useCallback(() => {
+    setSidebarWidth(Math.min(sidebarWidth, window.innerWidth));
+  }, [sidebarWidth, setSidebarWidth]);
+
+  useEffect(() => {
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+    };
+  }, [onResize]);
+
+  const graphWidth = useMemo(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth - sidebarWidth;
+    }
+    return 100;
+  }, [sidebarWidth]);
 
   const updateButtonKey = useMemo(() => crypto.randomUUID(), []);
 
   return (
     <div className="absolute flex flex-row w-full h-full">
-      <div className="flex flex-col h-full">
-        {expressions.map((expression, i) => (
-          <div key={expression.id} className="flex flex-row">
-            <input
-              onChange={(e) => {
-                updateExpression(e.target.value, i);
-              }}
-            />
+      {sidebarWidth > 0 ? (
+        <div
+          className="flex flex-col h-full"
+          style={{ width: `${sidebarWidth}px` }}
+        >
+          {expressions.map((expression, i) => (
+            <div className="flex flex-row w-full" key={expression.id}>
+              <EditableMathField
+                className="w-full"
+                latex={expression.latex}
+                onChange={(e) => {
+                  updateExpression(
+                    e.text(),
+                    e.latex().replaceAll(kSqrtRegex, "\\sqrt{}"),
+                    i
+                  );
+                }}
+              />
+              <button
+                onClick={() => {
+                  if (expressions.length === 1) {
+                    addExpression();
+                  }
+                  deleteExpression(i);
+                }}
+                type="button"
+              >
+                <p>-</p>
+              </button>
+            </div>
+          ))}
+          <div className="flex flex-row" key={updateButtonKey}>
             <button
               onClick={() => {
-                if (expressions.length === 1) {
-                  addExpression();
-                }
-                deleteExpression(i);
+                addExpression();
               }}
+              type="button"
             >
-              <p>-</p>
+              <p>+</p>
             </button>
           </div>
-        ))}
-        <div key={updateButtonKey} className="flex flex-row">
-          <button
-            onClick={() => {
-              addExpression();
-            }}
-          >
-            <p>+</p>
-          </button>
         </div>
+      ) : (
+        <div className="ml-2" />
+      )}
+      <div
+        className="flex w-5 cursor-ew-resize justify-center"
+        onMouseDownCapture={() => {
+          setDragging(true);
+        }}
+      >
+        <div className="w-0.5 bg-black" />
       </div>
-      <Plot
-        data={graphs}
-        onRelayout={(event) => {
-          onUpdatePlot(event);
-        }}
-        config={{
-          autosizable: true,
-          scrollZoom: true,
-          responsive: true,
-        }}
-        layout={{
-          xaxis: {
-            range: xRange,
-          },
-          yaxis: {
-            range: yRange,
-          },
-          dragmode: "pan",
-          modebar: { orientation: "v" },
-        }}
-        className="w-full h-full"
-      />
+      {graphWidth > 0 ? (
+        <Graph expressions={expressions} width={graphWidth} />
+      ) : null}
     </div>
   );
 }
