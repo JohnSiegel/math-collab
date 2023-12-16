@@ -17,12 +17,54 @@ const math = create(all);
 
 const kGraphLOD = 500;
 
-const kLogBaseRegex =
-  /\\log_({([^}]+)}|([^{}]))\\left\(([^(\\right)]+)\\right\)/g;
-const kReplaceLogBase = "\\log\\left($4,$2$3\\right)";
+const kLog = "\\log_";
 
-const kLogDefaultBaseRegex = /\\log\\left\(([^(\\right)]+)\\right\)/g;
-const kReplaceLogDefaultBase = "\\log\\left($1,10\\right)";
+function groupPosition(
+  latex: string,
+  groupBegin: string,
+  groupEnd: string
+): number {
+  let pos = 0;
+  let depth = 0;
+  if (latex.slice(0, groupBegin.length) !== groupBegin) {
+    return 1;
+  }
+  pos += groupBegin.length;
+  depth++;
+  while (depth > 0) {
+    if (latex.slice(pos, pos + groupBegin.length) === groupBegin) {
+      depth++;
+      pos += groupBegin.length;
+    } else if (latex.slice(pos, pos + groupEnd.length) === groupEnd) {
+      depth--;
+      pos += groupEnd.length;
+    } else {
+      pos++;
+    }
+  }
+  return pos;
+}
+const kLeftParen = "\\left(";
+const kRightParen = "\\right)";
+
+function transformLogBases(latex: string): string {
+  console.log(latex);
+  let logIndex = latex.indexOf(kLog);
+  while (logIndex !== -1) {
+    const logSuffix = logIndex + kLog.length;
+    const baseEnd = groupPosition(latex.slice(logSuffix), "{", "}") + logSuffix;
+    const base = latex.slice(logSuffix, baseEnd);
+    const argEnd =
+      groupPosition(latex.slice(baseEnd), kLeftParen, kRightParen) + baseEnd;
+    latex = `${latex.slice(0, logIndex)}\\ln${kLeftParen}${latex.slice(
+      baseEnd + kLeftParen.length,
+      argEnd - kRightParen.length
+    )},${base}${kRightParen}${latex.slice(argEnd)}`;
+    logIndex = latex.indexOf(kLog);
+  }
+  console.log(latex);
+  return latex;
+}
 
 export function Graph(props: {
   expressions: Expression[];
@@ -32,10 +74,7 @@ export function Graph(props: {
     return props.expressions.map((expression) => {
       if (expression.latex !== "") {
         try {
-          const withLogBases = expression.latex
-            .replaceAll(kLogDefaultBaseRegex, kReplaceLogDefaultBase)
-            .replaceAll(kLogBaseRegex, kReplaceLogBase);
-          return parseTex(withLogBases).compile();
+          return parseTex(transformLogBases(expression.latex)).compile();
         } catch (e) {
           if (e instanceof Error) {
             return e;
